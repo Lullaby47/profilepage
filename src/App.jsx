@@ -232,6 +232,8 @@ function App() {
   const hasDragged = useRef(false);
   const mobilePanelRef = useRef(null);
   const clickTimerRef = useRef(null);
+  const lastSkillTapRef = useRef({ key: null, time: 0 });
+  const lastProfileTapRef = useRef({ time: 0 });
   const animationFrameRef = useRef(null);
   const lastFrameRef = useRef(0);
   const desktopVelocitiesRef = useRef([]);
@@ -760,18 +762,22 @@ function App() {
     }, 1800);
   }
 
-  function handleSkillInteraction(skill, index, detail = 1) {
-    if (detail === 2) {
+  function handleSkillInteraction(skill, index) {
+    const now = Date.now();
+    const wasRecentSecondTap =
+      lastSkillTapRef.current.key === skill &&
+      now - lastSkillTapRef.current.time < 350;
+
+    if (wasRecentSecondTap) {
+      lastSkillTapRef.current = { key: null, time: 0 };
       window.clearTimeout(clickTimerRef.current);
       setActiveBubble(null);
       handleSkillClick(skill, index);
       return;
     }
 
-    window.clearTimeout(clickTimerRef.current);
-    clickTimerRef.current = window.setTimeout(() => {
-      showBubble("skill", skill, skill);
-    }, 220);
+    lastSkillTapRef.current = { key: skill, time: now };
+    showBubble("skill", skill, skill);
   }
 
   function handleProfileClick() {
@@ -785,18 +791,20 @@ function App() {
     setShowProfilePanel(true);
   }
 
-  function handleProfileInteraction(detail = 1) {
-    if (detail === 2) {
+  function handleProfileInteraction() {
+    const now = Date.now();
+    const wasRecentSecondTap = now - lastProfileTapRef.current.time < 350;
+
+    if (wasRecentSecondTap) {
+      lastProfileTapRef.current = { time: 0 };
       window.clearTimeout(clickTimerRef.current);
       setActiveBubble(null);
       handleProfileClick();
       return;
     }
 
-    window.clearTimeout(clickTimerRef.current);
-    clickTimerRef.current = window.setTimeout(() => {
-      showBubble("profile", "main-profile", "Ayush Pokharel");
-    }, 220);
+    lastProfileTapRef.current = { time: now };
+    showBubble("profile", "main-profile", "Ayush Pokharel");
   }
 
   return (
@@ -851,7 +859,7 @@ function App() {
                         hasDragged.current = false;
                         setDraggingSkillIndex(index);
                       }}
-                      onClick={(e) => handleSkillInteraction(skill, index, e.detail)}
+                      onClick={() => handleSkillInteraction(skill, index)}
                       style={{
                         transform: `translate3d(${mobileSkillPositions[index].x}px, ${mobileSkillPositions[index].y}px, 0)`,
                         animationDuration: `${skillStyles[index].duration}s`,
@@ -871,7 +879,7 @@ function App() {
                       hasDragged.current = false;
                       setDraggingProfile(true);
                     }}
-                    onClick={(e) => handleProfileInteraction(e.detail)}
+                    onClick={handleProfileInteraction}
                     style={{
                       transform: `translate3d(${mobileProfilePos.x}px, ${mobileProfilePos.y}px, 0)`,
                     }}
@@ -913,7 +921,7 @@ function App() {
                       hasDragged.current = false;
                       setDraggingSkillIndex(index);
                     }}
-                    onClick={(e) => handleSkillInteraction(skill, index, e.detail)}
+                    onClick={() => handleSkillInteraction(skill, index)}
                     style={{
                       transform: `translate3d(${skillPositions[index].x}px, ${skillPositions[index].y}px, 0)`,
                       animationDuration: `${skillStyles[index].duration}s`,
@@ -933,7 +941,7 @@ function App() {
                     hasDragged.current = false;
                     setDraggingProfile(true);
                   }}
-                  onClick={(e) => handleProfileInteraction(e.detail)}
+                  onClick={handleProfileInteraction}
                   style={{
                     transform: `translate3d(${profilePos.x}px, ${profilePos.y}px, 0)`,
                   }}
