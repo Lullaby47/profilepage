@@ -1,0 +1,9 @@
+node_modules/
+client/node_modules/
+server/node_modules/
+dist/
+build/
+.DS_Store
+Thumbs.db
+*.log
+server/data/inquiries.json
