@@ -123,7 +123,7 @@ button {
 /* PROFILE PAGE */
 .profile-world {
   width: 100vw;
-  height: 100vh;
+  height: 300vh;
   position: relative;
   background:
     radial-gradient(circle at 20% 30%, rgba(236, 72, 153, 0.25), transparent 30%),
@@ -424,15 +424,16 @@ button {
   height: 100vh;
   z-index: 250;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: top;
+  justify-content: right;
   padding: 24px;
   pointer-events: none;
+  
 }
 
 .skill-panel {
   width: min(760px, 82%);
-  max-height: 86vh;
+  max-height:86vh;
   overflow-y: auto;
   overflow-x: hidden;
   pointer-events: auto;
