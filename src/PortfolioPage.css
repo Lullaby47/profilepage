@@ -480,6 +480,11 @@
     grid-column: 1 / -1;
   }
 
+  .bento-profile {
+    order: -1;
+    justify-items: start;
+  }
+
   .panel-grid-hero,
   .cap-feature-card,
   .bento-visuals {
@@ -488,6 +493,9 @@
 
   .profile-frame {
     width: min(100%, 200px);
+    justify-self: start;
+    align-self: start;
+    margin-top: 0;
   }
 }
 
@@ -503,6 +511,18 @@
 
   .bento-main h1 {
     font-size: clamp(34px, 10vw, 52px);
+  }
+
+  .bento-profile {
+    justify-items: start;
+    align-content: start;
+  }
+
+  .profile-frame {
+    width: min(100%, 170px);
+    justify-self: start;
+    align-self: start;
+    margin-top: 0;
   }
 
   .art-card-capabilities,
