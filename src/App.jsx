@@ -649,7 +649,94 @@ function App() {
     draggingSkillIndex,
   ]);
 
-  // Desktop: single click shows skill info (only if not dragged)
+  function handlePointerMove(e) {
+    const moved =
+      Math.abs(e.clientX - dragStart.current.x) > 5 ||
+      Math.abs(e.clientY - dragStart.current.y) > 5;
+
+    if (moved) hasDragged.current = true;
+
+    if (viewport.isMobile) {
+      const panelRect = mobilePanelRef.current?.getBoundingClientRect();
+
+      if (!panelRect) return;
+
+      if (draggingProfile) {
+      setMobileProfilePos(
+        clampPositionInBounds(
+          e.clientX - panelRect.left - mobileOrbit.profileSize / 2,
+            e.clientY - panelRect.top - mobileOrbit.profileSize / 2,
+            mobileOrbit.profileSize,
+            mobileOrbit
+          )
+        );
+      }
+
+      if (draggingSkillIndex !== null) {
+      const updated = [...mobileSkillPositions];
+      updated[draggingSkillIndex] = clampPositionInBounds(
+        e.clientX - panelRect.left - mobileOrbit.skillSize / 2,
+          e.clientY - panelRect.top - mobileOrbit.skillSize / 2,
+          mobileOrbit.skillSize,
+          mobileOrbit
+        );
+        setMobileSkillPositions(updated);
+      }
+
+      return;
+    }
+
+    if (draggingProfile) {
+      setProfilePos(
+        clampPosition(
+          e.clientX - viewport.profileSize / 2,
+          e.clientY - viewport.profileSize / 2,
+          viewport.profileSize,
+          viewport
+        )
+      );
+    }
+
+    if (draggingSkillIndex !== null) {
+      const updated = [...skillPositions];
+      updated[draggingSkillIndex] = clampPosition(
+        e.clientX - viewport.skillSize / 2,
+        e.clientY - viewport.skillSize / 2,
+        viewport.skillSize,
+        viewport
+      );
+      setSkillPositions(updated);
+    }
+  }
+
+  useEffect(() => {
+    if (!draggingProfile && draggingSkillIndex === null) return undefined;
+
+    function handleWindowPointerMove(event) {
+      handlePointerMove(event);
+    }
+
+    function handleWindowPointerUp() {
+      stopDrag();
+    }
+
+    window.addEventListener("pointermove", handleWindowPointerMove);
+    window.addEventListener("pointerup", handleWindowPointerUp);
+    window.addEventListener("pointercancel", handleWindowPointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", handleWindowPointerMove);
+      window.removeEventListener("pointerup", handleWindowPointerUp);
+      window.removeEventListener("pointercancel", handleWindowPointerUp);
+    };
+  }, [draggingProfile, draggingSkillIndex, viewport.isMobile, mobileOrbit.profileSize, mobileOrbit.skillSize, viewport.profileSize, viewport.skillSize]);
+
+  function stopDrag() {
+    setDraggingProfile(false);
+    setDraggingSkillIndex(null);
+  }
+
+  // DESKTOP: Single click shows skill info immediately
   function handleDesktopSkillClick(skill, index) {
     if (hasDragged.current) {
       hasDragged.current = false;
@@ -665,7 +752,7 @@ function App() {
     setSelectedSkill(skill);
   }
 
-  // Mobile: double-tap logic (unchanged)
+  // MOBILE: Double-tap logic (first tap shows bubble, second tap shows info)
   function handleMobileSkillInteraction(skill, index) {
     const now = Date.now();
     const wasRecentSecondTap =
@@ -673,7 +760,7 @@ function App() {
       now - lastSkillTapRef.current.time < 350;
 
     if (wasRecentSecondTap) {
-      // Double tap detected: show info
+      // Double tap detected: show info panel
       lastSkillTapRef.current = { key: null, time: 0 };
       window.clearTimeout(clickTimerRef.current);
       setActiveBubble(null);
@@ -687,12 +774,13 @@ function App() {
       return;
     }
 
-    // First tap: show bubble
+    // First tap: show bubble with skill name
     lastSkillTapRef.current = { key: skill, time: now };
     showBubble("skill", skill, skill);
   }
 
-  function handleSkillInteraction(skill, index) {
+  // Route to correct handler based on device
+  function handleSkillClick(skill, index) {
     if (viewport.isMobile) {
       handleMobileSkillInteraction(skill, index);
     } else {
@@ -711,18 +799,19 @@ function App() {
     }, 1800);
   }
 
-  function handleProfileClick() {
+  // DESKTOP: Single click for profile gallery
+  function handleDesktopProfileClick() {
     if (hasDragged.current) {
       hasDragged.current = false;
       return;
     }
-
     setSelectedSkill(null);
     setSelectedImage(null);
     setShowProfilePanel(true);
   }
 
-  function handleProfileInteraction() {
+  // MOBILE: Double-tap for profile gallery
+  function handleMobileProfileInteraction() {
     const now = Date.now();
     const wasRecentSecondTap = now - lastProfileTapRef.current.time < 350;
 
@@ -730,12 +819,21 @@ function App() {
       lastProfileTapRef.current = { time: 0 };
       window.clearTimeout(clickTimerRef.current);
       setActiveBubble(null);
-      handleProfileClick();
+      handleDesktopProfileClick();
       return;
     }
 
     lastProfileTapRef.current = { time: now };
     showBubble("profile", "main-profile", "Ayush Pokharel");
+  }
+
+  // Route profile interaction
+  function handleProfileInteraction() {
+    if (viewport.isMobile) {
+      handleMobileProfileInteraction();
+    } else {
+      handleDesktopProfileClick();
+    }
   }
 
   return (
@@ -790,7 +888,7 @@ function App() {
                         hasDragged.current = false;
                         setDraggingSkillIndex(index);
                       }}
-                      onClick={() => handleSkillInteraction(skill, index)}
+                      onClick={() => handleSkillClick(skill, index)}
                       style={{
                         transform: `translate3d(${mobileSkillPositions[index].x}px, ${mobileSkillPositions[index].y}px, 0)`,
                         animationDuration: `${skillStyles[index].duration}s`,
