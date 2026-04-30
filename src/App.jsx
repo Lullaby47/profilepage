@@ -73,7 +73,7 @@ function createVelocitySet(count, minSpeed, maxSpeed) {
   return Array.from({ length: count }, () => randomVelocity(minSpeed, maxSpeed));
 }
 
-function resolveSkillCollisions(positions, velocities, size) {
+function resolveSkillCollisions(positions, velocities, size, restitution = 0.9) {
   const radius = size / 2;
 
   for (let i = 0; i < positions.length; i += 1) {
@@ -100,10 +100,12 @@ function resolveSkillCollisions(positions, velocities, size) {
       const ny = dy / distance;
       const overlap = minDistance - distance;
 
-      positions[i].x -= (nx * overlap) / 2;
-      positions[i].y -= (ny * overlap) / 2;
-      positions[j].x += (nx * overlap) / 2;
-      positions[j].y += (ny * overlap) / 2;
+      // Bouncy separation with easing
+      const pushForce = overlap * 0.6;
+      positions[i].x -= nx * pushForce;
+      positions[i].y -= ny * pushForce;
+      positions[j].x += nx * pushForce;
+      positions[j].y += ny * pushForce;
 
       const relativeVelocityX = velocities[i].x - velocities[j].x;
       const relativeVelocityY = velocities[i].y - velocities[j].y;
@@ -111,15 +113,17 @@ function resolveSkillCollisions(positions, velocities, size) {
 
       if (speedAlongNormal > 0) continue;
 
-      velocities[i].x -= speedAlongNormal * nx;
-      velocities[i].y -= speedAlongNormal * ny;
-      velocities[j].x += speedAlongNormal * nx;
-      velocities[j].y += speedAlongNormal * ny;
+      // Bouncy collision response with restitution
+      const impulse = (1 + restitution) * speedAlongNormal;
+      velocities[i].x -= impulse * nx;
+      velocities[i].y -= impulse * ny;
+      velocities[j].x += impulse * nx;
+      velocities[j].y += impulse * ny;
     }
   }
 }
 
-function resolveProfileCollisions(positions, velocities, size, profilePos, profileSize) {
+function resolveProfileCollisions(positions, velocities, size, profilePos, profileSize, restitution = 0.85) {
   const skillRadius = size / 2;
   const profileRadius = profileSize / 2;
   const profileCenterX = profilePos.x + profileRadius;
@@ -146,40 +150,54 @@ function resolveProfileCollisions(positions, velocities, size, profilePos, profi
     const ny = dy / distance;
     const overlap = minDistance - distance;
 
-    positions[i].x += nx * overlap;
-    positions[i].y += ny * overlap;
+    // Bouncy bounce off profile
+    positions[i].x += nx * overlap * 0.8;
+    positions[i].y += ny * overlap * 0.8;
 
     const dot = velocities[i].x * nx + velocities[i].y * ny;
-    velocities[i].x -= 2 * dot * nx;
-    velocities[i].y -= 2 * dot * ny;
+    const impulse = (1 + restitution) * dot;
+    velocities[i].x -= impulse * nx;
+    velocities[i].y -= impulse * ny;
   }
 }
 
-function constrainToBounds(positions, velocities, size, bounds) {
+function constrainToBounds(positions, velocities, size, bounds, restitution = 0.85) {
   const minX = 12;
   const minY = bounds.topPadding ?? 12;
   const maxX = bounds.width - size - 12;
   const maxY = bounds.height - size - 12;
 
   for (let i = 0; i < positions.length; i += 1) {
+    let bounced = false;
+    
     if (positions[i].x <= minX) {
       positions[i].x = minX;
-      velocities[i].x = Math.abs(velocities[i].x);
+      velocities[i].x = Math.abs(velocities[i].x) * restitution;
+      bounced = true;
     }
 
     if (positions[i].x >= maxX) {
       positions[i].x = maxX;
-      velocities[i].x = -Math.abs(velocities[i].x);
+      velocities[i].x = -Math.abs(velocities[i].x) * restitution;
+      bounced = true;
     }
 
     if (positions[i].y <= minY) {
       positions[i].y = minY;
-      velocities[i].y = Math.abs(velocities[i].y);
+      velocities[i].y = Math.abs(velocities[i].y) * restitution;
+      bounced = true;
     }
 
     if (positions[i].y >= maxY) {
       positions[i].y = maxY;
-      velocities[i].y = -Math.abs(velocities[i].y);
+      velocities[i].y = -Math.abs(velocities[i].y) * restitution;
+      bounced = true;
+    }
+    
+    // Add slight random variation on bounce for organic feel
+    if (bounced) {
+      velocities[i].x += (Math.random() - 0.5) * 8;
+      velocities[i].y += (Math.random() - 0.5) * 8;
     }
   }
 }
@@ -197,19 +215,27 @@ function stepSkillSimulation({
   const nextPositions = positions.map((position) => ({ ...position }));
   const nextVelocities = velocities.map((velocity) => ({ ...velocity }));
 
+  // Apply easing for smoother motion
+  const speedFactor = Math.min(deltaSeconds * 60, 1.2);
+  
   for (let i = 0; i < nextPositions.length; i += 1) {
     if (draggedIndex === i) continue;
+    
+    // Add slight drag for natural slowdown
+    const drag = 0.998;
+    nextVelocities[i].x *= drag;
+    nextVelocities[i].y *= drag;
 
-    nextPositions[i].x += nextVelocities[i].x * deltaSeconds;
-    nextPositions[i].y += nextVelocities[i].y * deltaSeconds;
+    nextPositions[i].x += nextVelocities[i].x * deltaSeconds * speedFactor;
+    nextPositions[i].y += nextVelocities[i].y * deltaSeconds * speedFactor;
   }
 
-  constrainToBounds(nextPositions, nextVelocities, size, bounds);
+  constrainToBounds(nextPositions, nextVelocities, size, bounds, 0.88);
   if (profilePos) {
-    resolveProfileCollisions(nextPositions, nextVelocities, size, profilePos, profileSize);
+    resolveProfileCollisions(nextPositions, nextVelocities, size, profilePos, profileSize, 0.85);
   }
-  resolveSkillCollisions(nextPositions, nextVelocities, size);
-  constrainToBounds(nextPositions, nextVelocities, size, bounds);
+  resolveSkillCollisions(nextPositions, nextVelocities, size, 0.92);
+  constrainToBounds(nextPositions, nextVelocities, size, bounds, 0.88);
 
   return {
     positions: nextPositions,
@@ -227,6 +253,7 @@ function App() {
   const [splashMessage, setSplashMessage] = useState("Your inquiry was sent.");
   const [isSendingInquiry, setIsSendingInquiry] = useState(false);
   const [activeBubble, setActiveBubble] = useState(null);
+  const [trailEffects, setTrailEffects] = useState([]);
 
   const dragStart = useRef({ x: 0, y: 0 });
   const hasDragged = useRef(false);
@@ -332,14 +359,35 @@ function App() {
     },
   };
   const [flash, setFlash] = useState(false);
+  
   function getRandomStyle() {
     const colors = ["red", "yellow", "green", "blue", "purple"];
+    const gradients = {
+      red: "linear-gradient(135deg, #ef4444, #dc2626)",
+      yellow: "linear-gradient(135deg, #eab308, #ca8a04)",
+      green: "linear-gradient(135deg, #22c55e, #16a34a)",
+      blue: "linear-gradient(135deg, #3b82f6, #2563eb)",
+      purple: "linear-gradient(135deg, #a855f7, #9333ea)"
+    };
+    const color = colors[Math.floor(Math.random() * colors.length)];
     return {
-      color: colors[Math.floor(Math.random() * colors.length)],
+      color: color,
+      gradient: gradients[color],
       duration: (Math.random() * 1.5 + 0.8).toFixed(2),
       delay: (Math.random() * 2).toFixed(2),
+      scale: 0.8 + Math.random() * 0.7,
     };
   }
+  
+  // Add trail effect on collisions
+  const addTrailEffect = (x, y, color) => {
+    const id = Date.now() + Math.random();
+    setTrailEffects(prev => [...prev, { id, x, y, color, life: 1 }]);
+    setTimeout(() => {
+      setTrailEffects(prev => prev.filter(effect => effect.id !== id));
+    }, 500);
+  };
+  
   async function handleInquiry() {
     if (isSendingInquiry) return;
 
@@ -386,6 +434,7 @@ function App() {
       setIsSendingInquiry(false);
     }
   }
+  
   const getDefaultProfilePosition = () =>
     clampPosition(
       viewport.centerX - viewport.profileSize / 2,
@@ -551,8 +600,8 @@ function App() {
   }, [viewport, skills.length]);
 
   useEffect(() => {
-    desktopVelocitiesRef.current = createVelocitySet(skills.length, 32, 64);
-    mobileVelocitiesRef.current = createVelocitySet(skills.length, 26, 48);
+    desktopVelocitiesRef.current = createVelocitySet(skills.length, 28, 55);
+    mobileVelocitiesRef.current = createVelocitySet(skills.length, 22, 42);
   }, [skills.length, viewport.isMobile]);
 
   useEffect(() => {
@@ -581,7 +630,9 @@ function App() {
         lastFrameRef.current = timestamp;
       }
 
-      const deltaSeconds = Math.min((timestamp - lastFrameRef.current) / 1000, 0.033);
+      let deltaSeconds = Math.min((timestamp - lastFrameRef.current) / 1000, 0.033);
+      // Smooth delta for consistent motion
+      deltaSeconds = Math.max(deltaSeconds, 0.016);
       lastFrameRef.current = timestamp;
 
       if (viewport.isMobile) {
@@ -843,6 +894,34 @@ function App() {
       onPointerUp={stopDrag}
       onPointerCancel={stopDrag}
     >
+      {/* Trail Effects */}
+      {trailEffects.map(effect => (
+        <div
+          key={effect.id}
+          className="trail-effect"
+          style={{
+            left: effect.x,
+            top: effect.y,
+            backgroundColor: effect.color,
+            animation: 'trailFade 0.5s ease-out forwards'
+          }}
+        />
+      ))}
+      
+      {/* Animated background particles */}
+      <div className="animated-bg">
+        {[...Array(30)].map((_, i) => (
+          <div key={i} className="bg-particle" style={{
+            left: `${Math.random() * 100}%`,
+            top: `${Math.random() * 100}%`,
+            animationDelay: `${Math.random() * 10}s`,
+            animationDuration: `${5 + Math.random() * 10}s`,
+            width: `${2 + Math.random() * 6}px`,
+            height: `${2 + Math.random() * 6}px`
+          }} />
+        ))}
+      </div>
+      
       {!showProfile ? (
         <section className="hero">
           <div className="glass">
@@ -893,6 +972,7 @@ function App() {
                         transform: `translate3d(${mobileSkillPositions[index].x}px, ${mobileSkillPositions[index].y}px, 0)`,
                         animationDuration: `${skillStyles[index].duration}s`,
                         animationDelay: `${skillStyles[index].delay}s`,
+                        background: skillStyles[index].gradient,
                       }}
                     >
                       {activeBubble?.type === "skill" && activeBubble.key === skill && (
@@ -935,6 +1015,7 @@ function App() {
                     x2={pos.x + viewport.skillSize / 2}
                     y2={pos.y + viewport.skillSize / 2}
                     className={`connection-line line-${skillStyles[index].color}`}
+                    style={{ strokeDashoffset: Date.now() / 50 }}
                   />
                 ))}
               </svg>
@@ -952,11 +1033,14 @@ function App() {
                     }}
                     onClick={() => handleDesktopSkillClick(skill, index)}
                     style={{
-                      transform: `translate3d(${skillPositions[index].x}px, ${skillPositions[index].y}px, 0)`,
+                      transform: `translate3d(${skillPositions[index].x}px, ${skillPositions[index].y}px, 0) scale(${skillStyles[index].scale})`,
                       animationDuration: `${skillStyles[index].duration}s`,
                       animationDelay: `${skillStyles[index].delay}s`,
+                      background: skillStyles[index].gradient,
+                      transition: 'transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1)'
                     }}
                   >
+                    <div className="skill-glow"></div>
                     {activeBubble?.type === "skill" && activeBubble.key === skill && (
                       <span className="tap-message">{activeBubble.message}</span>
                     )}
@@ -975,6 +1059,7 @@ function App() {
                     transform: `translate3d(${profilePos.x}px, ${profilePos.y}px, 0)`,
                   }}
                 >
+                  <div className="profile-glow"></div>
                   <img src="/my-photo.jpg" alt="profile" draggable="false" />
                   {activeBubble?.type === "profile" &&
                     activeBubble.key === "main-profile" && (
