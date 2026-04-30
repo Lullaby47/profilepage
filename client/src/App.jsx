@@ -74,7 +74,7 @@ function createVelocitySet(count, minSpeed, maxSpeed) {
   return Array.from({ length: count }, () => randomVelocity(minSpeed, maxSpeed));
 }
 
-function resolveSkillCollisions(positions, velocities, size, restitution = 0.9) {
+function resolveSkillCollisions(positions, velocities, size) {
   const radius = size / 2;
 
   for (let i = 0; i < positions.length; i += 1) {
@@ -101,12 +101,10 @@ function resolveSkillCollisions(positions, velocities, size, restitution = 0.9) 
       const ny = dy / distance;
       const overlap = minDistance - distance;
 
-      // Bouncy separation with easing
-      const pushForce = overlap * 0.6;
-      positions[i].x -= nx * pushForce;
-      positions[i].y -= ny * pushForce;
-      positions[j].x += nx * pushForce;
-      positions[j].y += ny * pushForce;
+      positions[i].x -= (nx * overlap) / 2;
+      positions[i].y -= (ny * overlap) / 2;
+      positions[j].x += (nx * overlap) / 2;
+      positions[j].y += (ny * overlap) / 2;
 
       const relativeVelocityX = velocities[i].x - velocities[j].x;
       const relativeVelocityY = velocities[i].y - velocities[j].y;
@@ -114,17 +112,15 @@ function resolveSkillCollisions(positions, velocities, size, restitution = 0.9) 
 
       if (speedAlongNormal > 0) continue;
 
-      // Bouncy collision response with restitution
-      const impulse = (1 + restitution) * speedAlongNormal;
-      velocities[i].x -= impulse * nx;
-      velocities[i].y -= impulse * ny;
-      velocities[j].x += impulse * nx;
-      velocities[j].y += impulse * ny;
+      velocities[i].x -= speedAlongNormal * nx;
+      velocities[i].y -= speedAlongNormal * ny;
+      velocities[j].x += speedAlongNormal * nx;
+      velocities[j].y += speedAlongNormal * ny;
     }
   }
 }
 
-function resolveProfileCollisions(positions, velocities, size, profilePos, profileSize, restitution = 0.85) {
+function resolveProfileCollisions(positions, velocities, size, profilePos, profileSize) {
   const skillRadius = size / 2;
   const profileRadius = profileSize / 2;
   const profileCenterX = profilePos.x + profileRadius;
@@ -151,54 +147,40 @@ function resolveProfileCollisions(positions, velocities, size, profilePos, profi
     const ny = dy / distance;
     const overlap = minDistance - distance;
 
-    // Bouncy bounce off profile
-    positions[i].x += nx * overlap * 0.8;
-    positions[i].y += ny * overlap * 0.8;
+    positions[i].x += nx * overlap;
+    positions[i].y += ny * overlap;
 
     const dot = velocities[i].x * nx + velocities[i].y * ny;
-    const impulse = (1 + restitution) * dot;
-    velocities[i].x -= impulse * nx;
-    velocities[i].y -= impulse * ny;
+    velocities[i].x -= 2 * dot * nx;
+    velocities[i].y -= 2 * dot * ny;
   }
 }
 
-function constrainToBounds(positions, velocities, size, bounds, restitution = 0.85) {
+function constrainToBounds(positions, velocities, size, bounds) {
   const minX = 12;
   const minY = bounds.topPadding ?? 12;
   const maxX = bounds.width - size - 12;
   const maxY = bounds.height - size - 12;
 
   for (let i = 0; i < positions.length; i += 1) {
-    let bounced = false;
-    
     if (positions[i].x <= minX) {
       positions[i].x = minX;
-      velocities[i].x = Math.abs(velocities[i].x) * restitution;
-      bounced = true;
+      velocities[i].x = Math.abs(velocities[i].x);
     }
 
     if (positions[i].x >= maxX) {
       positions[i].x = maxX;
-      velocities[i].x = -Math.abs(velocities[i].x) * restitution;
-      bounced = true;
+      velocities[i].x = -Math.abs(velocities[i].x);
     }
 
     if (positions[i].y <= minY) {
       positions[i].y = minY;
-      velocities[i].y = Math.abs(velocities[i].y) * restitution;
-      bounced = true;
+      velocities[i].y = Math.abs(velocities[i].y);
     }
 
     if (positions[i].y >= maxY) {
       positions[i].y = maxY;
-      velocities[i].y = -Math.abs(velocities[i].y) * restitution;
-      bounced = true;
-    }
-    
-    // Add slight random variation on bounce for organic feel
-    if (bounced) {
-      velocities[i].x += (Math.random() - 0.5) * 8;
-      velocities[i].y += (Math.random() - 0.5) * 8;
+      velocities[i].y = -Math.abs(velocities[i].y);
     }
   }
 }
@@ -216,38 +198,21 @@ function stepSkillSimulation({
   const nextPositions = positions.map((position) => ({ ...position }));
   const nextVelocities = velocities.map((velocity) => ({ ...velocity }));
 
-  // Apply easing for smoother motion
-  const speedFactor = Math.min(deltaSeconds * 60, 1.2);
-  
   for (let i = 0; i < nextPositions.length; i += 1) {
     if (draggedIndex === i) continue;
-    
-    // Add slight drag for natural slowdown
-    const drag = 0.998;
-    nextVelocities[i].x *= drag;
-    nextVelocities[i].y *= drag;
 
-    nextPositions[i].x += nextVelocities[i].x * deltaSeconds * speedFactor;
-    nextPositions[i].y += nextVelocities[i].y * deltaSeconds * speedFactor;
+    nextPositions[i].x += nextVelocities[i].x * deltaSeconds;
+    nextPositions[i].y += nextVelocities[i].y * deltaSeconds;
   }
 
-<<<<<<< HEAD
-  constrainToBounds(nextPositions, nextVelocities, size, bounds, 0.88);
-=======
   constrainToBounds(nextPositions, nextVelocities, size, bounds);
 
->>>>>>> 451483d (Initial commit)
   if (profilePos) {
-    resolveProfileCollisions(nextPositions, nextVelocities, size, profilePos, profileSize, 0.85);
+    resolveProfileCollisions(nextPositions, nextVelocities, size, profilePos, profileSize);
   }
-<<<<<<< HEAD
-  resolveSkillCollisions(nextPositions, nextVelocities, size, 0.92);
-  constrainToBounds(nextPositions, nextVelocities, size, bounds, 0.88);
-=======
 
   resolveSkillCollisions(nextPositions, nextVelocities, size);
   constrainToBounds(nextPositions, nextVelocities, size, bounds);
->>>>>>> 451483d (Initial commit)
 
   return {
     positions: nextPositions,
@@ -300,14 +265,9 @@ function App() {
   const [splashType, setSplashType] = useState("success");
   const [splashMessage, setSplashMessage] = useState("Your inquiry was sent.");
   const [isSendingInquiry, setIsSendingInquiry] = useState(false);
-<<<<<<< HEAD
-  const [activeBubble, setActiveBubble] = useState(null);
-  const [trailEffects, setTrailEffects] = useState([]);
-=======
   const [flash, setFlash] = useState(false);
   const [viewport, setViewport] = useState(() => getViewportConfig());
   const mobileOrbit = getMobileOrbitConfig(viewport);
->>>>>>> 451483d (Initial commit)
 
   const dragStart = useRef({ x: 0, y: 0 });
   const hasDragged = useRef(false);
@@ -399,44 +359,16 @@ function App() {
       strengths: ["Imagination", "Visual Ideas"],
     },
   };
-<<<<<<< HEAD
-  const [flash, setFlash] = useState(false);
-  
-=======
 
->>>>>>> 451483d (Initial commit)
   function getRandomStyle() {
     const colors = ["red", "yellow", "green", "blue", "purple"];
-    const gradients = {
-      red: "linear-gradient(135deg, #ef4444, #dc2626)",
-      yellow: "linear-gradient(135deg, #eab308, #ca8a04)",
-      green: "linear-gradient(135deg, #22c55e, #16a34a)",
-      blue: "linear-gradient(135deg, #3b82f6, #2563eb)",
-      purple: "linear-gradient(135deg, #a855f7, #9333ea)"
-    };
-    const color = colors[Math.floor(Math.random() * colors.length)];
     return {
-      color: color,
-      gradient: gradients[color],
+      color: colors[Math.floor(Math.random() * colors.length)],
       duration: (Math.random() * 1.5 + 0.8).toFixed(2),
       delay: (Math.random() * 2).toFixed(2),
-      scale: 0.8 + Math.random() * 0.7,
     };
   }
-<<<<<<< HEAD
-  
-  // Add trail effect on collisions
-  const addTrailEffect = (x, y, color) => {
-    const id = Date.now() + Math.random();
-    setTrailEffects(prev => [...prev, { id, x, y, color, life: 1 }]);
-    setTimeout(() => {
-      setTrailEffects(prev => prev.filter(effect => effect.id !== id));
-    }, 500);
-  };
-  
-=======
 
->>>>>>> 451483d (Initial commit)
   async function handleInquiry() {
     if (isSendingInquiry) return;
 
@@ -487,11 +419,7 @@ function App() {
       setIsSendingInquiry(false);
     }
   }
-<<<<<<< HEAD
-  
-=======
 
->>>>>>> 451483d (Initial commit)
   const getDefaultProfilePosition = () =>
     clampPosition(
       viewport.centerX - viewport.profileSize / 2,
@@ -667,8 +595,8 @@ function App() {
   }, [viewport, skills.length]);
 
   useEffect(() => {
-    desktopVelocitiesRef.current = createVelocitySet(skills.length, 28, 55);
-    mobileVelocitiesRef.current = createVelocitySet(skills.length, 22, 42);
+    desktopVelocitiesRef.current = createVelocitySet(skills.length, 32, 64);
+    mobileVelocitiesRef.current = createVelocitySet(skills.length, 26, 48);
   }, [skills.length, viewport.isMobile]);
 
   useEffect(() => {
@@ -695,9 +623,7 @@ function App() {
         lastFrameRef.current = timestamp;
       }
 
-      let deltaSeconds = Math.min((timestamp - lastFrameRef.current) / 1000, 0.033);
-      // Smooth delta for consistent motion
-      deltaSeconds = Math.max(deltaSeconds, 0.016);
+      const deltaSeconds = Math.min((timestamp - lastFrameRef.current) / 1000, 0.033);
       lastFrameRef.current = timestamp;
 
       if (viewport.isMobile) {
@@ -878,115 +804,26 @@ function App() {
     setDraggingSkillIndex(null);
   }
 
-  // DESKTOP: Single click shows skill info immediately
-  function handleDesktopSkillClick(skill, index) {
+  function handleSkillClick(skill, index) {
     if (hasDragged.current) {
       hasDragged.current = false;
       return;
     }
-    // Update style animation
+
     const updated = [...skillStyles];
     updated[index] = getRandomStyle();
     setSkillStyles(updated);
-<<<<<<< HEAD
-    // Show skill detail panel
-    setShowProfilePanel(false);
-    setSelectedImage(null);
-    setSelectedSkill(skill);
-  }
-
-  // MOBILE: Double-tap logic (first tap shows bubble, second tap shows info)
-  function handleMobileSkillInteraction(skill, index) {
-    const now = Date.now();
-    const wasRecentSecondTap =
-      lastSkillTapRef.current.key === skill &&
-      now - lastSkillTapRef.current.time < 350;
-
-    if (wasRecentSecondTap) {
-      // Double tap detected: show info panel
-      lastSkillTapRef.current = { key: null, time: 0 };
-      window.clearTimeout(clickTimerRef.current);
-      setActiveBubble(null);
-      // Show skill panel
-      const updated = [...skillStyles];
-      updated[index] = getRandomStyle();
-      setSkillStyles(updated);
-      setShowProfilePanel(false);
-      setSelectedImage(null);
-      setSelectedSkill(skill);
-      return;
-    }
-
-    // First tap: show bubble with skill name
-    lastSkillTapRef.current = { key: skill, time: now };
-    showBubble("skill", skill, skill);
-  }
-
-  // Route to correct handler based on device
-  function handleSkillClick(skill, index) {
-    if (viewport.isMobile) {
-      handleMobileSkillInteraction(skill, index);
-    } else {
-      handleDesktopSkillClick(skill, index);
-    }
-  }
-
-  function showBubble(type, key, message) {
-    setActiveBubble({ type, key, message });
-
-    window.clearTimeout(clickTimerRef.current);
-    clickTimerRef.current = window.setTimeout(() => {
-      setActiveBubble((current) =>
-        current?.type === type && current?.key === key ? null : current
-      );
-    }, 1800);
-  }
-
-  // DESKTOP: Single click for profile gallery
-  function handleDesktopProfileClick() {
-=======
     setSelectedSkill(skill);
   }
 
   function handleProfileClick() {
->>>>>>> 451483d (Initial commit)
     if (hasDragged.current) {
       hasDragged.current = false;
       return;
     }
+
     setSelectedSkill(null);
-<<<<<<< HEAD
-    setSelectedImage(null);
-    setShowProfilePanel(true);
-  }
-
-  // MOBILE: Double-tap for profile gallery
-  function handleMobileProfileInteraction() {
-    const now = Date.now();
-    const wasRecentSecondTap = now - lastProfileTapRef.current.time < 350;
-
-    if (wasRecentSecondTap) {
-      lastProfileTapRef.current = { time: 0 };
-      window.clearTimeout(clickTimerRef.current);
-      setActiveBubble(null);
-      handleDesktopProfileClick();
-      return;
-    }
-
-    lastProfileTapRef.current = { time: now };
-    showBubble("profile", "main-profile", "Ayush Pokharel");
-=======
     navigateTo("portfolio");
->>>>>>> 451483d (Initial commit)
-  }
-
-  // Route profile interaction
-  function handleProfileInteraction() {
-    if (viewport.isMobile) {
-      handleMobileProfileInteraction();
-    } else {
-      handleDesktopProfileClick();
-    }
   }
 
   return (
@@ -996,39 +833,7 @@ function App() {
       onPointerUp={stopDrag}
       onPointerCancel={stopDrag}
     >
-<<<<<<< HEAD
-      {/* Trail Effects */}
-      {trailEffects.map(effect => (
-        <div
-          key={effect.id}
-          className="trail-effect"
-          style={{
-            left: effect.x,
-            top: effect.y,
-            backgroundColor: effect.color,
-            animation: 'trailFade 0.5s ease-out forwards'
-          }}
-        />
-      ))}
-      
-      {/* Animated background particles */}
-      <div className="animated-bg">
-        {[...Array(30)].map((_, i) => (
-          <div key={i} className="bg-particle" style={{
-            left: `${Math.random() * 100}%`,
-            top: `${Math.random() * 100}%`,
-            animationDelay: `${Math.random() * 10}s`,
-            animationDuration: `${5 + Math.random() * 10}s`,
-            width: `${2 + Math.random() * 6}px`,
-            height: `${2 + Math.random() * 6}px`
-          }} />
-        ))}
-      </div>
-      
-      {!showProfile ? (
-=======
       {currentView === "home" && (
->>>>>>> 451483d (Initial commit)
         <section className="hero">
           <div className="glass">
             <h1>Designing Digital Experiences</h1>
@@ -1085,7 +890,6 @@ function App() {
                         transform: `translate3d(${mobileSkillPositions[index].x}px, ${mobileSkillPositions[index].y}px, 0)`,
                         animationDuration: `${skillStyles[index].duration}s`,
                         animationDelay: `${skillStyles[index].delay}s`,
-                        background: skillStyles[index].gradient,
                       }}
                     />
                   ))}
@@ -1124,7 +928,6 @@ function App() {
                     x2={pos.x + viewport.skillSize / 2}
                     y2={pos.y + viewport.skillSize / 2}
                     className={`connection-line line-${skillStyles[index].color}`}
-                    style={{ strokeDashoffset: Date.now() / 50 }}
                   />
                 ))}
               </svg>
@@ -1140,28 +943,13 @@ function App() {
                       hasDragged.current = false;
                       setDraggingSkillIndex(index);
                     }}
-<<<<<<< HEAD
-                    onClick={() => handleDesktopSkillClick(skill, index)}
-=======
                     onClick={() => handleSkillClick(skill, index)}
->>>>>>> 451483d (Initial commit)
                     style={{
-                      transform: `translate3d(${skillPositions[index].x}px, ${skillPositions[index].y}px, 0) scale(${skillStyles[index].scale})`,
+                      transform: `translate3d(${skillPositions[index].x}px, ${skillPositions[index].y}px, 0)`,
                       animationDuration: `${skillStyles[index].duration}s`,
                       animationDelay: `${skillStyles[index].delay}s`,
-                      background: skillStyles[index].gradient,
-                      transition: 'transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1)'
                     }}
-<<<<<<< HEAD
-                  >
-                    <div className="skill-glow"></div>
-                    {activeBubble?.type === "skill" && activeBubble.key === skill && (
-                      <span className="tap-message">{activeBubble.message}</span>
-                    )}
-                  </button>
-=======
                   />
->>>>>>> 451483d (Initial commit)
                 ))}
 
                 <button
@@ -1176,20 +964,8 @@ function App() {
                     transform: `translate3d(${profilePos.x}px, ${profilePos.y}px, 0)`,
                   }}
                 >
-<<<<<<< HEAD
-                  <div className="profile-glow"></div>
-                  <img src="/my-photo.jpg" alt="profile" draggable="false" />
-                  {activeBubble?.type === "profile" &&
-                    activeBubble.key === "main-profile" && (
-                      <span className="tap-message profile-message">
-                        {activeBubble.message}
-                      </span>
-                    )}
-                </div>
-=======
                   <img src="/my-photo.jpg" alt="Ayush Pokharel profile" draggable="false" />
                 </button>
->>>>>>> 451483d (Initial commit)
               </div>
             </>
           )}
