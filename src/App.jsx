@@ -649,106 +649,55 @@ function App() {
     draggingSkillIndex,
   ]);
 
-  function handlePointerMove(e) {
-    const moved =
-      Math.abs(e.clientX - dragStart.current.x) > 5 ||
-      Math.abs(e.clientY - dragStart.current.y) > 5;
-
-    if (moved) hasDragged.current = true;
-
-    if (viewport.isMobile) {
-      const panelRect = mobilePanelRef.current?.getBoundingClientRect();
-
-      if (!panelRect) return;
-
-      if (draggingProfile) {
-      setMobileProfilePos(
-        clampPositionInBounds(
-          e.clientX - panelRect.left - mobileOrbit.profileSize / 2,
-            e.clientY - panelRect.top - mobileOrbit.profileSize / 2,
-            mobileOrbit.profileSize,
-            mobileOrbit
-          )
-        );
-      }
-
-      if (draggingSkillIndex !== null) {
-      const updated = [...mobileSkillPositions];
-      updated[draggingSkillIndex] = clampPositionInBounds(
-        e.clientX - panelRect.left - mobileOrbit.skillSize / 2,
-          e.clientY - panelRect.top - mobileOrbit.skillSize / 2,
-          mobileOrbit.skillSize,
-          mobileOrbit
-        );
-        setMobileSkillPositions(updated);
-      }
-
-      return;
-    }
-
-    if (draggingProfile) {
-      setProfilePos(
-        clampPosition(
-          e.clientX - viewport.profileSize / 2,
-          e.clientY - viewport.profileSize / 2,
-          viewport.profileSize,
-          viewport
-        )
-      );
-    }
-
-    if (draggingSkillIndex !== null) {
-      const updated = [...skillPositions];
-      updated[draggingSkillIndex] = clampPosition(
-        e.clientX - viewport.skillSize / 2,
-        e.clientY - viewport.skillSize / 2,
-        viewport.skillSize,
-        viewport
-      );
-      setSkillPositions(updated);
-    }
-  }
-
-  useEffect(() => {
-    if (!draggingProfile && draggingSkillIndex === null) return undefined;
-
-    function handleWindowPointerMove(event) {
-      handlePointerMove(event);
-    }
-
-    function handleWindowPointerUp() {
-      stopDrag();
-    }
-
-    window.addEventListener("pointermove", handleWindowPointerMove);
-    window.addEventListener("pointerup", handleWindowPointerUp);
-    window.addEventListener("pointercancel", handleWindowPointerUp);
-
-    return () => {
-      window.removeEventListener("pointermove", handleWindowPointerMove);
-      window.removeEventListener("pointerup", handleWindowPointerUp);
-      window.removeEventListener("pointercancel", handleWindowPointerUp);
-    };
-  }, [draggingProfile, draggingSkillIndex, viewport.isMobile, mobileOrbit.profileSize, mobileOrbit.skillSize, viewport.profileSize, viewport.skillSize]);
-
-  function stopDrag() {
-    setDraggingProfile(false);
-    setDraggingSkillIndex(null);
-  }
-
-  function handleSkillClick(skill, index) {
+  // Desktop: single click shows skill info (only if not dragged)
+  function handleDesktopSkillClick(skill, index) {
     if (hasDragged.current) {
       hasDragged.current = false;
       return;
     }
-
+    // Update style animation
     const updated = [...skillStyles];
     updated[index] = getRandomStyle();
     setSkillStyles(updated);
-
+    // Show skill detail panel
     setShowProfilePanel(false);
     setSelectedImage(null);
     setSelectedSkill(skill);
+  }
+
+  // Mobile: double-tap logic (unchanged)
+  function handleMobileSkillInteraction(skill, index) {
+    const now = Date.now();
+    const wasRecentSecondTap =
+      lastSkillTapRef.current.key === skill &&
+      now - lastSkillTapRef.current.time < 350;
+
+    if (wasRecentSecondTap) {
+      // Double tap detected: show info
+      lastSkillTapRef.current = { key: null, time: 0 };
+      window.clearTimeout(clickTimerRef.current);
+      setActiveBubble(null);
+      // Show skill panel
+      const updated = [...skillStyles];
+      updated[index] = getRandomStyle();
+      setSkillStyles(updated);
+      setShowProfilePanel(false);
+      setSelectedImage(null);
+      setSelectedSkill(skill);
+      return;
+    }
+
+    // First tap: show bubble
+    lastSkillTapRef.current = { key: skill, time: now };
+    showBubble("skill", skill, skill);
+  }
+
+  function handleSkillInteraction(skill, index) {
+    if (viewport.isMobile) {
+      handleMobileSkillInteraction(skill, index);
+    } else {
+      handleDesktopSkillClick(skill, index);
+    }
   }
 
   function showBubble(type, key, message) {
@@ -760,24 +709,6 @@ function App() {
         current?.type === type && current?.key === key ? null : current
       );
     }, 1800);
-  }
-
-  function handleSkillInteraction(skill, index) {
-    const now = Date.now();
-    const wasRecentSecondTap =
-      lastSkillTapRef.current.key === skill &&
-      now - lastSkillTapRef.current.time < 350;
-
-    if (wasRecentSecondTap) {
-      lastSkillTapRef.current = { key: null, time: 0 };
-      window.clearTimeout(clickTimerRef.current);
-      setActiveBubble(null);
-      handleSkillClick(skill, index);
-      return;
-    }
-
-    lastSkillTapRef.current = { key: skill, time: now };
-    showBubble("skill", skill, skill);
   }
 
   function handleProfileClick() {
@@ -921,7 +852,7 @@ function App() {
                       hasDragged.current = false;
                       setDraggingSkillIndex(index);
                     }}
-                    onClick={() => handleSkillInteraction(skill, index)}
+                    onClick={() => handleDesktopSkillClick(skill, index)}
                     style={{
                       transform: `translate3d(${skillPositions[index].x}px, ${skillPositions[index].y}px, 0)`,
                       animationDuration: `${skillStyles[index].duration}s`,
