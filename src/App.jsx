@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./App.css";
+import PortfolioPage from "./PortfolioPage";
 
 function getViewportConfig() {
   const width = window.innerWidth;
@@ -73,7 +74,7 @@ function createVelocitySet(count, minSpeed, maxSpeed) {
   return Array.from({ length: count }, () => randomVelocity(minSpeed, maxSpeed));
 }
 
-function resolveSkillCollisions(positions, velocities, size, restitution = 0.9) {
+function resolveSkillCollisions(positions, velocities, size) {
   const radius = size / 2;
 
   for (let i = 0; i < positions.length; i += 1) {
@@ -100,12 +101,10 @@ function resolveSkillCollisions(positions, velocities, size, restitution = 0.9) 
       const ny = dy / distance;
       const overlap = minDistance - distance;
 
-      // Bouncy separation with easing
-      const pushForce = overlap * 0.6;
-      positions[i].x -= nx * pushForce;
-      positions[i].y -= ny * pushForce;
-      positions[j].x += nx * pushForce;
-      positions[j].y += ny * pushForce;
+      positions[i].x -= (nx * overlap) / 2;
+      positions[i].y -= (ny * overlap) / 2;
+      positions[j].x += (nx * overlap) / 2;
+      positions[j].y += (ny * overlap) / 2;
 
       const relativeVelocityX = velocities[i].x - velocities[j].x;
       const relativeVelocityY = velocities[i].y - velocities[j].y;
@@ -113,17 +112,15 @@ function resolveSkillCollisions(positions, velocities, size, restitution = 0.9) 
 
       if (speedAlongNormal > 0) continue;
 
-      // Bouncy collision response with restitution
-      const impulse = (1 + restitution) * speedAlongNormal;
-      velocities[i].x -= impulse * nx;
-      velocities[i].y -= impulse * ny;
-      velocities[j].x += impulse * nx;
-      velocities[j].y += impulse * ny;
+      velocities[i].x -= speedAlongNormal * nx;
+      velocities[i].y -= speedAlongNormal * ny;
+      velocities[j].x += speedAlongNormal * nx;
+      velocities[j].y += speedAlongNormal * ny;
     }
   }
 }
 
-function resolveProfileCollisions(positions, velocities, size, profilePos, profileSize, restitution = 0.85) {
+function resolveProfileCollisions(positions, velocities, size, profilePos, profileSize) {
   const skillRadius = size / 2;
   const profileRadius = profileSize / 2;
   const profileCenterX = profilePos.x + profileRadius;
@@ -150,54 +147,40 @@ function resolveProfileCollisions(positions, velocities, size, profilePos, profi
     const ny = dy / distance;
     const overlap = minDistance - distance;
 
-    // Bouncy bounce off profile
-    positions[i].x += nx * overlap * 0.8;
-    positions[i].y += ny * overlap * 0.8;
+    positions[i].x += nx * overlap;
+    positions[i].y += ny * overlap;
 
     const dot = velocities[i].x * nx + velocities[i].y * ny;
-    const impulse = (1 + restitution) * dot;
-    velocities[i].x -= impulse * nx;
-    velocities[i].y -= impulse * ny;
+    velocities[i].x -= 2 * dot * nx;
+    velocities[i].y -= 2 * dot * ny;
   }
 }
 
-function constrainToBounds(positions, velocities, size, bounds, restitution = 0.85) {
+function constrainToBounds(positions, velocities, size, bounds) {
   const minX = 12;
   const minY = bounds.topPadding ?? 12;
   const maxX = bounds.width - size - 12;
   const maxY = bounds.height - size - 12;
 
   for (let i = 0; i < positions.length; i += 1) {
-    let bounced = false;
-    
     if (positions[i].x <= minX) {
       positions[i].x = minX;
-      velocities[i].x = Math.abs(velocities[i].x) * restitution;
-      bounced = true;
+      velocities[i].x = Math.abs(velocities[i].x);
     }
 
     if (positions[i].x >= maxX) {
       positions[i].x = maxX;
-      velocities[i].x = -Math.abs(velocities[i].x) * restitution;
-      bounced = true;
+      velocities[i].x = -Math.abs(velocities[i].x);
     }
 
     if (positions[i].y <= minY) {
       positions[i].y = minY;
-      velocities[i].y = Math.abs(velocities[i].y) * restitution;
-      bounced = true;
+      velocities[i].y = Math.abs(velocities[i].y);
     }
 
     if (positions[i].y >= maxY) {
       positions[i].y = maxY;
-      velocities[i].y = -Math.abs(velocities[i].y) * restitution;
-      bounced = true;
-    }
-    
-    // Add slight random variation on bounce for organic feel
-    if (bounced) {
-      velocities[i].x += (Math.random() - 0.5) * 8;
-      velocities[i].y += (Math.random() - 0.5) * 8;
+      velocities[i].y = -Math.abs(velocities[i].y);
     }
   }
 }
@@ -215,27 +198,21 @@ function stepSkillSimulation({
   const nextPositions = positions.map((position) => ({ ...position }));
   const nextVelocities = velocities.map((velocity) => ({ ...velocity }));
 
-  // Apply easing for smoother motion
-  const speedFactor = Math.min(deltaSeconds * 60, 1.2);
-  
   for (let i = 0; i < nextPositions.length; i += 1) {
     if (draggedIndex === i) continue;
-    
-    // Add slight drag for natural slowdown
-    const drag = 0.998;
-    nextVelocities[i].x *= drag;
-    nextVelocities[i].y *= drag;
 
-    nextPositions[i].x += nextVelocities[i].x * deltaSeconds * speedFactor;
-    nextPositions[i].y += nextVelocities[i].y * deltaSeconds * speedFactor;
+    nextPositions[i].x += nextVelocities[i].x * deltaSeconds;
+    nextPositions[i].y += nextVelocities[i].y * deltaSeconds;
   }
 
-  constrainToBounds(nextPositions, nextVelocities, size, bounds, 0.88);
+  constrainToBounds(nextPositions, nextVelocities, size, bounds);
+
   if (profilePos) {
-    resolveProfileCollisions(nextPositions, nextVelocities, size, profilePos, profileSize, 0.85);
+    resolveProfileCollisions(nextPositions, nextVelocities, size, profilePos, profileSize);
   }
-  resolveSkillCollisions(nextPositions, nextVelocities, size, 0.92);
-  constrainToBounds(nextPositions, nextVelocities, size, bounds, 0.88);
+
+  resolveSkillCollisions(nextPositions, nextVelocities, size);
+  constrainToBounds(nextPositions, nextVelocities, size, bounds);
 
   return {
     positions: nextPositions,
@@ -243,24 +220,58 @@ function stepSkillSimulation({
   };
 }
 
+function getInitialView() {
+  if (window.location.hash === "#portfolio") return "portfolio";
+  if (window.location.hash === "#world") return "world";
+  return "home";
+}
+
+async function postInquiry(payload) {
+  const requestOptions = {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  };
+
+  const endpoints = ["/api/inquiry"];
+
+  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+    endpoints.push("http://localhost:3001/api/inquiry");
+  }
+
+  let lastError = null;
+
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint, requestOptions);
+      if (!response.ok) {
+        throw new Error(`Request failed with status ${response.status}`);
+      }
+      return response;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError ?? new Error("Inquiry request failed");
+}
+
 function App() {
-  const [showProfile, setShowProfile] = useState(false);
+  const [currentView, setCurrentView] = useState(() => getInitialView());
   const [selectedSkill, setSelectedSkill] = useState(null);
-  const [showProfilePanel, setShowProfilePanel] = useState(false);
-  const [selectedImage, setSelectedImage] = useState(null);
   const [showSuccessSplash, setShowSuccessSplash] = useState(false);
   const [splashType, setSplashType] = useState("success");
   const [splashMessage, setSplashMessage] = useState("Your inquiry was sent.");
   const [isSendingInquiry, setIsSendingInquiry] = useState(false);
-  const [activeBubble, setActiveBubble] = useState(null);
-  const [trailEffects, setTrailEffects] = useState([]);
+  const [flash, setFlash] = useState(false);
+  const [viewport, setViewport] = useState(() => getViewportConfig());
+  const mobileOrbit = getMobileOrbitConfig(viewport);
 
   const dragStart = useRef({ x: 0, y: 0 });
   const hasDragged = useRef(false);
   const mobilePanelRef = useRef(null);
-  const clickTimerRef = useRef(null);
-  const lastSkillTapRef = useRef({ key: null, time: 0 });
-  const lastProfileTapRef = useRef({ time: 0 });
   const animationFrameRef = useRef(null);
   const lastFrameRef = useRef(0);
   const desktopVelocitiesRef = useRef([]);
@@ -269,8 +280,7 @@ function App() {
   const mobileSkillPositionsRef = useRef([]);
   const profilePosRef = useRef(null);
   const mobileProfilePosRef = useRef(null);
-  const [viewport, setViewport] = useState(() => getViewportConfig());
-  const mobileOrbit = getMobileOrbitConfig(viewport);
+  const inquiryTimersRef = useRef([]);
 
   const skills = [
     "React",
@@ -282,15 +292,6 @@ function App() {
     "Problem Solving",
     "Teamwork",
     "Creativity",
-  ];
-
-  const profileImages = [
-    "photo1.png",
-    "photo2.png",
-    "photo3.png",
-    "photo4.png",
-    "photo5.png",
-    "photo6.png",
   ];
 
   const skillDetails = {
@@ -358,83 +359,67 @@ function App() {
       strengths: ["Imagination", "Visual Ideas"],
     },
   };
-  const [flash, setFlash] = useState(false);
-  
+
   function getRandomStyle() {
     const colors = ["red", "yellow", "green", "blue", "purple"];
-    const gradients = {
-      red: "linear-gradient(135deg, #ef4444, #dc2626)",
-      yellow: "linear-gradient(135deg, #eab308, #ca8a04)",
-      green: "linear-gradient(135deg, #22c55e, #16a34a)",
-      blue: "linear-gradient(135deg, #3b82f6, #2563eb)",
-      purple: "linear-gradient(135deg, #a855f7, #9333ea)"
-    };
-    const color = colors[Math.floor(Math.random() * colors.length)];
     return {
-      color: color,
-      gradient: gradients[color],
+      color: colors[Math.floor(Math.random() * colors.length)],
       duration: (Math.random() * 1.5 + 0.8).toFixed(2),
       delay: (Math.random() * 2).toFixed(2),
-      scale: 0.8 + Math.random() * 0.7,
     };
   }
-  
-  // Add trail effect on collisions
-  const addTrailEffect = (x, y, color) => {
-    const id = Date.now() + Math.random();
-    setTrailEffects(prev => [...prev, { id, x, y, color, life: 1 }]);
-    setTimeout(() => {
-      setTrailEffects(prev => prev.filter(effect => effect.id !== id));
-    }, 500);
-  };
-  
+
   async function handleInquiry() {
     if (isSendingInquiry) return;
 
     setIsSendingInquiry(true);
+    inquiryTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    inquiryTimersRef.current = [];
+    setShowSuccessSplash(false);
 
     try {
-      const response = await fetch("/api/inquiry", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          source: "portfolio-inquiry-button",
-          clickedAt: new Date().toISOString(),
-        }),
+      await postInquiry({
+        source:
+          currentView === "portfolio"
+            ? "portfolio-page-inquiry-button"
+            : "portfolio-inquiry-button",
+        clickedAt: new Date().toISOString(),
       });
 
-      if (!response.ok) {
-        throw new Error("Request failed");
-      }
-
       setFlash(true);
-      setShowSuccessSplash(false);
       setSplashType("success");
-      setSplashMessage("Your inquiry was sent.");
+      setSplashMessage("Success");
 
-      setTimeout(() => {
+      const flashTimer = window.setTimeout(() => {
         setFlash(false);
         setShowSuccessSplash(true);
 
-        setTimeout(() => {
+        const splashTimer = window.setTimeout(() => {
           setShowSuccessSplash(false);
-        }, 2000);
+        }, 1600);
+        inquiryTimersRef.current.push(splashTimer);
       }, 1000);
+      inquiryTimersRef.current.push(flashTimer);
     } catch (error) {
+      setFlash(true);
       setSplashType("error");
-      setSplashMessage("Inquiry failed. Please try again.");
-      setShowSuccessSplash(true);
+      setSplashMessage("Failed");
 
-      setTimeout(() => {
-        setShowSuccessSplash(false);
-      }, 2000);
+      const flashTimer = window.setTimeout(() => {
+        setFlash(false);
+        setShowSuccessSplash(true);
+
+        const splashTimer = window.setTimeout(() => {
+          setShowSuccessSplash(false);
+        }, 1600);
+        inquiryTimersRef.current.push(splashTimer);
+      }, 1000);
+      inquiryTimersRef.current.push(flashTimer);
     } finally {
       setIsSendingInquiry(false);
     }
   }
-  
+
   const getDefaultProfilePosition = () =>
     clampPosition(
       viewport.centerX - viewport.profileSize / 2,
@@ -445,9 +430,10 @@ function App() {
       viewport
     );
 
-  const getDefaultSkillPositions = () => {
-    return skills.map((_, i) => {
+  const getDefaultSkillPositions = () =>
+    skills.map((_, i) => {
       const angle = Math.PI - (i / (skills.length - 1)) * Math.PI;
+
       return clampPosition(
         viewport.centerX + viewport.orbitRadius * Math.cos(angle) - viewport.skillSize / 2,
         viewport.centerY - viewport.orbitRadius * Math.sin(angle) - viewport.skillSize / 2,
@@ -455,7 +441,6 @@ function App() {
         viewport
       );
     });
-  };
 
   const [profilePos, setProfilePos] = useState(() => {
     const saved = localStorage.getItem("profilePos");
@@ -495,12 +480,8 @@ function App() {
       const angle = Math.PI - (i / (skills.length - 1)) * Math.PI;
 
       return clampPositionInBounds(
-        mobileOrbit.centerX +
-          mobileOrbit.orbitRadius * Math.cos(angle) -
-          mobileOrbit.skillSize / 2,
-        mobileOrbit.centerY -
-          mobileOrbit.orbitRadius * Math.sin(angle) -
-          mobileOrbit.skillSize / 2,
+        mobileOrbit.centerX + mobileOrbit.orbitRadius * Math.cos(angle) - mobileOrbit.skillSize / 2,
+        mobileOrbit.centerY - mobileOrbit.orbitRadius * Math.sin(angle) - mobileOrbit.skillSize / 2,
         mobileOrbit.skillSize,
         mobileOrbit
       );
@@ -518,6 +499,7 @@ function App() {
       mobileOrbit
     );
   });
+
   const [mobileSkillPositions, setMobileSkillPositions] = useState(() =>
     getDefaultMobileSkillPositions()
   );
@@ -558,14 +540,25 @@ function App() {
       setViewport(getViewportConfig());
     }
 
+    function handleHashChange() {
+      setCurrentView(getInitialView());
+      setSelectedSkill(null);
+    }
+
     window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    window.addEventListener("hashchange", handleHashChange);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("hashchange", handleHashChange);
+    };
   }, []);
 
   useEffect(() => {
     setProfilePos((current) =>
       clampPosition(current.x, current.y, viewport.profileSize, viewport)
     );
+
     setSkillPositions((current) => {
       if (current.length !== skills.length) {
         return getDefaultSkillPositions();
@@ -575,6 +568,7 @@ function App() {
         clampPosition(pos.x, pos.y, viewport.skillSize, viewport)
       );
     });
+
     setMobileProfilePos((current) =>
       clampPositionInBounds(
         current.x,
@@ -583,6 +577,7 @@ function App() {
         mobileOrbit
       )
     );
+
     setMobileSkillPositions((current) => {
       if (current.length !== skills.length) {
         return getDefaultMobileSkillPositions();
@@ -600,39 +595,35 @@ function App() {
   }, [viewport, skills.length]);
 
   useEffect(() => {
-    desktopVelocitiesRef.current = createVelocitySet(skills.length, 28, 55);
-    mobileVelocitiesRef.current = createVelocitySet(skills.length, 22, 42);
+    desktopVelocitiesRef.current = createVelocitySet(skills.length, 32, 64);
+    mobileVelocitiesRef.current = createVelocitySet(skills.length, 26, 48);
   }, [skills.length, viewport.isMobile]);
 
   useEffect(() => {
     const timers = skills.map((_, index) => {
       const randomInterval = Math.random() * 3000 + 2000;
 
-      const timer = setInterval(() => {
+      return window.setInterval(() => {
         setSkillStyles((prev) => {
           const updated = [...prev];
           updated[index] = getRandomStyle();
           return updated;
         });
       }, randomInterval);
-
-      return timer;
     });
 
-    return () => timers.forEach(clearInterval);
+    return () => timers.forEach(window.clearInterval);
   }, [skills.length]);
 
   useEffect(() => {
-    if (!showProfile) return undefined;
+    if (currentView !== "world") return undefined;
 
     function animate(timestamp) {
       if (!lastFrameRef.current) {
         lastFrameRef.current = timestamp;
       }
 
-      let deltaSeconds = Math.min((timestamp - lastFrameRef.current) / 1000, 0.033);
-      // Smooth delta for consistent motion
-      deltaSeconds = Math.max(deltaSeconds, 0.016);
+      const deltaSeconds = Math.min((timestamp - lastFrameRef.current) / 1000, 0.033);
       lastFrameRef.current = timestamp;
 
       if (viewport.isMobile) {
@@ -683,11 +674,12 @@ function App() {
       if (animationFrameRef.current) {
         window.cancelAnimationFrame(animationFrameRef.current);
       }
+
       animationFrameRef.current = null;
       lastFrameRef.current = 0;
     };
   }, [
-    showProfile,
+    currentView,
     viewport.isMobile,
     viewport.width,
     viewport.height,
@@ -699,6 +691,31 @@ function App() {
     mobileOrbit.profileSize,
     draggingSkillIndex,
   ]);
+
+  useEffect(() => {
+    document.body.style.overflow = currentView === "portfolio" ? "auto" : "hidden";
+
+    return () => {
+      document.body.style.overflow = "auto";
+    };
+  }, [currentView]);
+
+  useEffect(() => {
+    return () => {
+      inquiryTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, []);
+
+  function navigateTo(view) {
+    if (view === "home") {
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+      setCurrentView("home");
+      setSelectedSkill(null);
+      return;
+    }
+
+    window.location.hash = view;
+  }
 
   function handlePointerMove(e) {
     const moved =
@@ -713,9 +730,9 @@ function App() {
       if (!panelRect) return;
 
       if (draggingProfile) {
-      setMobileProfilePos(
-        clampPositionInBounds(
-          e.clientX - panelRect.left - mobileOrbit.profileSize / 2,
+        setMobileProfilePos(
+          clampPositionInBounds(
+            e.clientX - panelRect.left - mobileOrbit.profileSize / 2,
             e.clientY - panelRect.top - mobileOrbit.profileSize / 2,
             mobileOrbit.profileSize,
             mobileOrbit
@@ -724,9 +741,9 @@ function App() {
       }
 
       if (draggingSkillIndex !== null) {
-      const updated = [...mobileSkillPositions];
-      updated[draggingSkillIndex] = clampPositionInBounds(
-        e.clientX - panelRect.left - mobileOrbit.skillSize / 2,
+        const updated = [...mobileSkillPositions];
+        updated[draggingSkillIndex] = clampPositionInBounds(
+          e.clientX - panelRect.left - mobileOrbit.skillSize / 2,
           e.clientY - panelRect.top - mobileOrbit.skillSize / 2,
           mobileOrbit.skillSize,
           mobileOrbit
@@ -787,153 +804,54 @@ function App() {
     setDraggingSkillIndex(null);
   }
 
-  // DESKTOP: Single click shows skill info immediately
-  function handleDesktopSkillClick(skill, index) {
+  function handleSkillClick(skill, index) {
     if (hasDragged.current) {
       hasDragged.current = false;
       return;
     }
-    // Update style animation
+
     const updated = [...skillStyles];
     updated[index] = getRandomStyle();
     setSkillStyles(updated);
-    // Show skill detail panel
-    setShowProfilePanel(false);
-    setSelectedImage(null);
     setSelectedSkill(skill);
   }
 
-  // MOBILE: Double-tap logic (first tap shows bubble, second tap shows info)
-  function handleMobileSkillInteraction(skill, index) {
-    const now = Date.now();
-    const wasRecentSecondTap =
-      lastSkillTapRef.current.key === skill &&
-      now - lastSkillTapRef.current.time < 350;
-
-    if (wasRecentSecondTap) {
-      // Double tap detected: show info panel
-      lastSkillTapRef.current = { key: null, time: 0 };
-      window.clearTimeout(clickTimerRef.current);
-      setActiveBubble(null);
-      // Show skill panel
-      const updated = [...skillStyles];
-      updated[index] = getRandomStyle();
-      setSkillStyles(updated);
-      setShowProfilePanel(false);
-      setSelectedImage(null);
-      setSelectedSkill(skill);
-      return;
-    }
-
-    // First tap: show bubble with skill name
-    lastSkillTapRef.current = { key: skill, time: now };
-    showBubble("skill", skill, skill);
-  }
-
-  // Route to correct handler based on device
-  function handleSkillClick(skill, index) {
-    if (viewport.isMobile) {
-      handleMobileSkillInteraction(skill, index);
-    } else {
-      handleDesktopSkillClick(skill, index);
-    }
-  }
-
-  function showBubble(type, key, message) {
-    setActiveBubble({ type, key, message });
-
-    window.clearTimeout(clickTimerRef.current);
-    clickTimerRef.current = window.setTimeout(() => {
-      setActiveBubble((current) =>
-        current?.type === type && current?.key === key ? null : current
-      );
-    }, 1800);
-  }
-
-  // DESKTOP: Single click for profile gallery
-  function handleDesktopProfileClick() {
+  function handleProfileClick() {
     if (hasDragged.current) {
       hasDragged.current = false;
       return;
     }
+
     setSelectedSkill(null);
-    setSelectedImage(null);
-    setShowProfilePanel(true);
-  }
-
-  // MOBILE: Double-tap for profile gallery
-  function handleMobileProfileInteraction() {
-    const now = Date.now();
-    const wasRecentSecondTap = now - lastProfileTapRef.current.time < 350;
-
-    if (wasRecentSecondTap) {
-      lastProfileTapRef.current = { time: 0 };
-      window.clearTimeout(clickTimerRef.current);
-      setActiveBubble(null);
-      handleDesktopProfileClick();
-      return;
-    }
-
-    lastProfileTapRef.current = { time: now };
-    showBubble("profile", "main-profile", "Ayush Pokharel");
-  }
-
-  // Route profile interaction
-  function handleProfileInteraction() {
-    if (viewport.isMobile) {
-      handleMobileProfileInteraction();
-    } else {
-      handleDesktopProfileClick();
-    }
+    navigateTo("portfolio");
   }
 
   return (
-      <div
+    <div
       className={`app ${flash ? "flash-red" : ""}`}
       onPointerMove={handlePointerMove}
       onPointerUp={stopDrag}
       onPointerCancel={stopDrag}
     >
-      {/* Trail Effects */}
-      {trailEffects.map(effect => (
-        <div
-          key={effect.id}
-          className="trail-effect"
-          style={{
-            left: effect.x,
-            top: effect.y,
-            backgroundColor: effect.color,
-            animation: 'trailFade 0.5s ease-out forwards'
-          }}
-        />
-      ))}
-      
-      {/* Animated background particles */}
-      <div className="animated-bg">
-        {[...Array(30)].map((_, i) => (
-          <div key={i} className="bg-particle" style={{
-            left: `${Math.random() * 100}%`,
-            top: `${Math.random() * 100}%`,
-            animationDelay: `${Math.random() * 10}s`,
-            animationDuration: `${5 + Math.random() * 10}s`,
-            width: `${2 + Math.random() * 6}px`,
-            height: `${2 + Math.random() * 6}px`
-          }} />
-        ))}
-      </div>
-      
-      {!showProfile ? (
+      {currentView === "home" && (
         <section className="hero">
           <div className="glass">
-            <h1>My Creative Universe 🚀</h1>
-            <p>I build digital worlds, explore ideas, and turn creativity into reality.</p>
-            <button onClick={() => setShowProfile(true)}>Explore My World</button>
+            <h1>Designing Digital Experiences</h1>
+            <button onClick={() => navigateTo("world")}>Explore My World</button>
           </div>
         </section>
-      ) : (
+      )}
+
+      {currentView === "world" && (
         <section className={`profile-world ${viewport.isMobile ? "profile-world-mobile" : ""}`}>
           {viewport.isMobile ? (
             <div className="mobile-world">
+              <div className="world-header">
+                <button className="nav-pill" onClick={() => navigateTo("home")}>
+                  Back
+                </button>
+              </div>
+
               <div className="mobile-skills-section">
                 <div
                   className="mobile-orbit-panel"
@@ -972,40 +890,35 @@ function App() {
                         transform: `translate3d(${mobileSkillPositions[index].x}px, ${mobileSkillPositions[index].y}px, 0)`,
                         animationDuration: `${skillStyles[index].duration}s`,
                         animationDelay: `${skillStyles[index].delay}s`,
-                        background: skillStyles[index].gradient,
                       }}
-                    >
-                      {activeBubble?.type === "skill" && activeBubble.key === skill && (
-                        <span className="tap-message">{activeBubble.message}</span>
-                      )}
-                    </button>
+                    />
                   ))}
 
-                  <div
-                    className="mobile-orbit-profile"
+                  <button
+                    className="mobile-orbit-profile profile-launch"
                     onPointerDown={(e) => {
                       dragStart.current = { x: e.clientX, y: e.clientY };
                       hasDragged.current = false;
                       setDraggingProfile(true);
                     }}
-                    onClick={handleProfileInteraction}
+                    onClick={handleProfileClick}
                     style={{
                       transform: `translate3d(${mobileProfilePos.x}px, ${mobileProfilePos.y}px, 0)`,
                     }}
                   >
-                    <img src="/my-photo.jpg" alt="profile" draggable="false" />
-                    {activeBubble?.type === "profile" &&
-                      activeBubble.key === "main-profile" && (
-                        <span className="tap-message profile-message">
-                          {activeBubble.message}
-                        </span>
-                      )}
-                  </div>
+                    <img src="/my-photo.jpg" alt="Ayush Pokharel profile" draggable="false" />
+                  </button>
                 </div>
               </div>
             </div>
           ) : (
             <>
+              <div className="world-header desktop-world-header">
+                <button className="nav-pill" onClick={() => navigateTo("home")}>
+                  Back
+                </button>
+              </div>
+
               <svg className="connection-layer">
                 {skillPositions.map((pos, index) => (
                   <line
@@ -1015,7 +928,6 @@ function App() {
                     x2={pos.x + viewport.skillSize / 2}
                     y2={pos.y + viewport.skillSize / 2}
                     className={`connection-line line-${skillStyles[index].color}`}
-                    style={{ strokeDashoffset: Date.now() / 50 }}
                   />
                 ))}
               </svg>
@@ -1031,43 +943,29 @@ function App() {
                       hasDragged.current = false;
                       setDraggingSkillIndex(index);
                     }}
-                    onClick={() => handleDesktopSkillClick(skill, index)}
+                    onClick={() => handleSkillClick(skill, index)}
                     style={{
-                      transform: `translate3d(${skillPositions[index].x}px, ${skillPositions[index].y}px, 0) scale(${skillStyles[index].scale})`,
+                      transform: `translate3d(${skillPositions[index].x}px, ${skillPositions[index].y}px, 0)`,
                       animationDuration: `${skillStyles[index].duration}s`,
                       animationDelay: `${skillStyles[index].delay}s`,
-                      background: skillStyles[index].gradient,
-                      transition: 'transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1)'
                     }}
-                  >
-                    <div className="skill-glow"></div>
-                    {activeBubble?.type === "skill" && activeBubble.key === skill && (
-                      <span className="tap-message">{activeBubble.message}</span>
-                    )}
-                  </button>
+                  />
                 ))}
 
-                <div
-                  className="profile-card"
+                <button
+                  className="profile-card profile-launch"
                   onPointerDown={(e) => {
                     dragStart.current = { x: e.clientX, y: e.clientY };
                     hasDragged.current = false;
                     setDraggingProfile(true);
                   }}
-                  onClick={handleProfileInteraction}
+                  onClick={handleProfileClick}
                   style={{
                     transform: `translate3d(${profilePos.x}px, ${profilePos.y}px, 0)`,
                   }}
                 >
-                  <div className="profile-glow"></div>
-                  <img src="/my-photo.jpg" alt="profile" draggable="false" />
-                  {activeBubble?.type === "profile" &&
-                    activeBubble.key === "main-profile" && (
-                      <span className="tap-message profile-message">
-                        {activeBubble.message}
-                      </span>
-                    )}
-                </div>
+                  <img src="/my-photo.jpg" alt="Ayush Pokharel profile" draggable="false" />
+                </button>
               </div>
             </>
           )}
@@ -1097,99 +995,25 @@ function App() {
               </div>
             </div>
           )}
-
-          {showProfilePanel && (
-            <div className="overlay" onClick={() => setShowProfilePanel(false)}>
-              <div className="panel-area">
-                <div className="skill-panel profile-gallery-panel" onClick={(e) => e.stopPropagation()}>
-                  <h2>Gallery</h2>
-                  
-
-                  <div className="profile-image-grid">
-                    {profileImages.map((image) => (
-                      <img
-                        key={image}
-                        src={`/profile-images/${image}`}
-                        alt={image}
-                        onClick={() => setSelectedImage(image)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {selectedImage && (
-            <div className="image-splash" onClick={() => setSelectedImage(null)}>
-              <div className="image-splash-card" onClick={(e) => e.stopPropagation()}>
-                <h1>Ayush Pokharel</h1>
-                <p className="email">pokharelayush2@gmail.com</p>
-                <button
-                  className="inquiry-button"
-                  onClick={handleInquiry}
-                  disabled={isSendingInquiry}
-                >
-                  {isSendingInquiry ? "Sending..." : "Send Inquiry"}
-                </button>
-                <p className="tagline">Contact me if you wanna make inquiry.</p>
-
-                <h2>Skill Sets</h2>
-
-                <div className="info-section">
-                  <h3>💻 Technical Strengths</h3>
-                  <ul>
-                    <li>Full-stack web development (frontend + backend basics)</li>
-                    <li>Building Progressive Web Apps (PWA)</li>
-                    <li>Version control using Git and GitHub</li>
-                    <li>API integration and backend logic development</li>
-                    <li>Basic AI/automation integration (chatbots, workflows)</li>
-                    <li>Facebook/Meta automation systems for business use</li>
-                  </ul>
-                </div>
-
-                <div className="info-section">
-                  <h3>⚙️ Problem-Solving & Systems Thinking</h3>
-                  <ul>
-                    <li>Strong analytical thinking</li>
-                    <li>Ability to design rule-based systems</li>
-                    <li>Identifying patterns and inefficiencies in workflows</li>
-                    <li>Logical, data-driven approach to decision making</li>
-                  </ul>
-                </div>
-
-                <div className="info-section">
-                  <h3>🚀 Business & Execution</h3>
-                  <ul>
-                    <li>Building and managing digital projects independently</li>
-                    <li>Understanding of revenue-driven systems</li>
-                    <li>Entrepreneurial mindset</li>
-                    <li>Experience handling real-world constraints and iteration</li>
-                  </ul>
-                </div>
-
-                <div className="info-section">
-                  <h3>🧠 Personal Strengths</h3>
-                  <ul>
-                    <li>Fast learner with self-taught technical skills</li>
-                    <li>High adaptability across tech, trading, and business</li>
-                    <li>Strong curiosity and problem exploration</li>
-                    <li>Willingness to take initiative and experiment</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {showSuccessSplash && (
-            <div className="success-splash" aria-live="polite">
-              <div className={`success-splash-card ${splashType}`}>
-                <h3>{splashType === "success" ? "Success" : "Failed"}</h3>
-                <p>{splashMessage}</p>
-              </div>
-            </div>
-          )}
         </section>
+      )}
+
+      {currentView === "portfolio" && (
+        <PortfolioPage
+          handleInquiry={handleInquiry}
+          isSendingInquiry={isSendingInquiry}
+          navigateTo={navigateTo}
+          skillDetails={skillDetails}
+        />
+      )}
+
+      {showSuccessSplash && (
+        <div className="success-splash" aria-live="polite">
+          <div className={`success-splash-card ${splashType}`}>
+            <h3>{splashType === "success" ? "Success" : "Failed"}</h3>
+            <p>{splashMessage}</p>
+          </div>
+        </div>
       )}
     </div>
   );
