@@ -259,12 +259,18 @@ async function postInquiry(payload) {
 }
 
 function App() {
+  const PORTFOLIO_OPEN_DELAY_MS = 1000;
+  const SKILL_SPEED_BOOST_DURATION_MS = 5000;
+  const SKILL_SPEED_BOOST_MULTIPLIER = 2.4;
+
   const [currentView, setCurrentView] = useState(() => getInitialView());
   const [selectedSkill, setSelectedSkill] = useState(null);
   const [showSuccessSplash, setShowSuccessSplash] = useState(false);
   const [splashType, setSplashType] = useState("success");
   const [splashMessage, setSplashMessage] = useState("Your inquiry was sent.");
   const [isSendingInquiry, setIsSendingInquiry] = useState(false);
+  const [isPortfolioLaunching, setIsPortfolioLaunching] = useState(false);
+  const [boostedSkillMotionUntil, setBoostedSkillMotionUntil] = useState(0);
   const [flash, setFlash] = useState(false);
   const [viewport, setViewport] = useState(() => getViewportConfig());
   const mobileOrbit = getMobileOrbitConfig(viewport);
@@ -281,6 +287,7 @@ function App() {
   const profilePosRef = useRef(null);
   const mobileProfilePosRef = useRef(null);
   const inquiryTimersRef = useRef([]);
+  const portfolioLaunchTimerRef = useRef(null);
 
   const skills = [
     "React",
@@ -543,6 +550,7 @@ function App() {
     function handleHashChange() {
       setCurrentView(getInitialView());
       setSelectedSkill(null);
+      setIsPortfolioLaunching(false);
     }
 
     window.addEventListener("resize", handleResize);
@@ -624,6 +632,10 @@ function App() {
       }
 
       const deltaSeconds = Math.min((timestamp - lastFrameRef.current) / 1000, 0.033);
+      const speedMultiplier =
+        currentView === "world" && boostedSkillMotionUntil > Date.now()
+          ? SKILL_SPEED_BOOST_MULTIPLIER
+          : 1;
       lastFrameRef.current = timestamp;
 
       if (viewport.isMobile) {
@@ -639,7 +651,7 @@ function App() {
           profilePos: mobileProfilePosRef.current,
           profileSize: mobileOrbit.profileSize,
           draggedIndex: draggingSkillIndex,
-          deltaSeconds,
+          deltaSeconds: deltaSeconds * speedMultiplier,
         });
 
         mobileVelocitiesRef.current = next.velocities;
@@ -657,7 +669,7 @@ function App() {
           profilePos: profilePosRef.current,
           profileSize: viewport.profileSize,
           draggedIndex: draggingSkillIndex,
-          deltaSeconds,
+          deltaSeconds: deltaSeconds * speedMultiplier,
         });
 
         desktopVelocitiesRef.current = next.velocities;
@@ -690,6 +702,7 @@ function App() {
     mobileOrbit.skillSize,
     mobileOrbit.profileSize,
     draggingSkillIndex,
+    boostedSkillMotionUntil,
   ]);
 
   useEffect(() => {
@@ -703,14 +716,23 @@ function App() {
   useEffect(() => {
     return () => {
       inquiryTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+      if (portfolioLaunchTimerRef.current) {
+        window.clearTimeout(portfolioLaunchTimerRef.current);
+      }
     };
   }, []);
 
   function navigateTo(view) {
+    if (portfolioLaunchTimerRef.current && view !== "portfolio") {
+      window.clearTimeout(portfolioLaunchTimerRef.current);
+      portfolioLaunchTimerRef.current = null;
+    }
+
     if (view === "home") {
       window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
       setCurrentView("home");
       setSelectedSkill(null);
+      setIsPortfolioLaunching(false);
       return;
     }
 
@@ -822,8 +844,15 @@ function App() {
       return;
     }
 
+    if (isPortfolioLaunching) return;
+
     setSelectedSkill(null);
-    navigateTo("portfolio");
+    setIsPortfolioLaunching(true);
+    setBoostedSkillMotionUntil(Date.now() + SKILL_SPEED_BOOST_DURATION_MS);
+    portfolioLaunchTimerRef.current = window.setTimeout(() => {
+      portfolioLaunchTimerRef.current = null;
+      navigateTo("portfolio");
+    }, PORTFOLIO_OPEN_DELAY_MS);
   }
 
   return (
@@ -888,7 +917,11 @@ function App() {
                       onClick={() => handleSkillClick(skill, index)}
                       style={{
                         transform: `translate3d(${mobileSkillPositions[index].x}px, ${mobileSkillPositions[index].y}px, 0)`,
-                        animationDuration: `${skillStyles[index].duration}s`,
+                        animationDuration: `${
+                          boostedSkillMotionUntil > Date.now()
+                            ? Math.max(Number(skillStyles[index].duration) * 0.55, 0.45).toFixed(2)
+                            : skillStyles[index].duration
+                        }s`,
                         animationDelay: `${skillStyles[index].delay}s`,
                       }}
                     />
@@ -946,7 +979,11 @@ function App() {
                     onClick={() => handleSkillClick(skill, index)}
                     style={{
                       transform: `translate3d(${skillPositions[index].x}px, ${skillPositions[index].y}px, 0)`,
-                      animationDuration: `${skillStyles[index].duration}s`,
+                      animationDuration: `${
+                        boostedSkillMotionUntil > Date.now()
+                          ? Math.max(Number(skillStyles[index].duration) * 0.55, 0.45).toFixed(2)
+                          : skillStyles[index].duration
+                      }s`,
                       animationDelay: `${skillStyles[index].delay}s`,
                     }}
                   />

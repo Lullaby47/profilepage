@@ -133,10 +133,6 @@ function PortfolioPage({ handleInquiry, isSendingInquiry, navigateTo, skillDetai
           </div>
 
           <div className="cap-feature-card">
-            <div className="cap-feature-copy">
-              <span className="label">Design Direction</span>
-              <p>Full-image presentation, calmer backgrounds, and stronger ratios make the panels feel premium instead of cramped.</p>
-            </div>
             <figure className="art-card art-card-capabilities">
               <img src={panelThemes.capabilities} alt="Capabilities panel visual theme" />
             </figure>

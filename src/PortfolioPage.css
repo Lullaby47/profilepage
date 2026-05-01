@@ -336,18 +336,15 @@
 
 .cap-feature-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
   align-items: center;
   margin-top: 22px;
-  padding: 18px;
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.58);
-  border: 1px solid rgba(23, 38, 61, 0.07);
+  padding: 0;
 }
 
 .bento-capabilities .cap-feature-card {
-  padding: 22px;
+  padding: 0;
 }
 
 .label,
@@ -376,8 +373,13 @@
 }
 
 .art-card-capabilities {
-  aspect-ratio: 4 / 3;
-  padding: 12px;
+  width: 100%;
+  aspect-ratio: 16 / 6;
+  padding: 0;
+}
+
+.art-card-capabilities img {
+  object-fit: cover;
 }
 
 .bento-capabilities .label {
