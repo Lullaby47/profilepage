@@ -30,10 +30,11 @@ const highlightMetrics = [
   { value: "Active", label: "Automation" },
 ];
 
-const visualNotes = [
-  "Images with code or typography read better when the full frame stays visible.",
-  "Soft background echoes work best when they are blurred and treated as texture, not content.",
-  "Consistent ratios create rhythm, but the art itself should stay intact inside the frame.",
+const designApproachPoints = [
+  "Thoughtful visuals and clear communication: I use visuals to simplify complex ideas and guide the user's attention. Every image, layout, and interaction is placed with intention, nothing is decorative without purpose.",
+  "Clarity over clutter: Interfaces are designed to be easy to scan, with strong hierarchy and readable content.",
+  "Consistency across sections: Spacing, proportions, and components stay uniform to create a smooth browsing experience.",
+  "Balance between design and function: Visual elements enhance the experience without overwhelming the core message.",
 ];
 
 function shuffleThemes(items) {
@@ -178,10 +179,10 @@ function PortfolioPage({ handleInquiry, isSendingInquiry, navigateTo, skillDetai
             <img src={backgroundThemes.visual} alt="" />
           </div>
           <div className="visual-notes-copy">
-            <p className="eyebrow">Visual Notes</p>
-            <h2>Images should support the page, not fight it.</h2>
+            <p className="eyebrow">Design Approach</p>
+            <h2>Thoughtful visuals. Clear communication.</h2>
             <ul className="visual-note-list">
-              {visualNotes.map((note) => (
+              {designApproachPoints.map((note) => (
                 <li key={note}>{note}</li>
               ))}
             </ul>

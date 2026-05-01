@@ -220,6 +220,20 @@ function stepSkillSimulation({
   };
 }
 
+function pullSkillsTowardTarget({ positions, size, targetX, targetY, deltaSeconds }) {
+  const pullAmount = Math.min(deltaSeconds * 3.2, 0.22);
+
+  return positions.map((position) => {
+    const centerX = position.x + size / 2;
+    const centerY = position.y + size / 2;
+
+    return {
+      x: position.x + (targetX - centerX) * pullAmount,
+      y: position.y + (targetY - centerY) * pullAmount,
+    };
+  });
+}
+
 function getInitialView() {
   if (window.location.hash === "#portfolio") return "portfolio";
   if (window.location.hash === "#world") return "world";
@@ -259,9 +273,8 @@ async function postInquiry(payload) {
 }
 
 function App() {
-  const PORTFOLIO_OPEN_DELAY_MS = 1000;
-  const SKILL_SPEED_BOOST_DURATION_MS = 5000;
-  const SKILL_SPEED_BOOST_MULTIPLIER = 2.4;
+  const PORTFOLIO_OPEN_DELAY_MS = 1300;
+  const SKILL_PULL_DURATION_MS = 1300;
 
   const [currentView, setCurrentView] = useState(() => getInitialView());
   const [selectedSkill, setSelectedSkill] = useState(null);
@@ -270,7 +283,7 @@ function App() {
   const [splashMessage, setSplashMessage] = useState("Your inquiry was sent.");
   const [isSendingInquiry, setIsSendingInquiry] = useState(false);
   const [isPortfolioLaunching, setIsPortfolioLaunching] = useState(false);
-  const [boostedSkillMotionUntil, setBoostedSkillMotionUntil] = useState(0);
+  const [skillPullUntil, setSkillPullUntil] = useState(0);
   const [flash, setFlash] = useState(false);
   const [viewport, setViewport] = useState(() => getViewportConfig());
   const mobileOrbit = getMobileOrbitConfig(viewport);
@@ -288,6 +301,8 @@ function App() {
   const mobileProfilePosRef = useRef(null);
   const inquiryTimersRef = useRef([]);
   const portfolioLaunchTimerRef = useRef(null);
+  const desktopLaunchSnapshotRef = useRef(null);
+  const mobileLaunchSnapshotRef = useRef(null);
 
   const skills = [
     "React",
@@ -542,6 +557,25 @@ function App() {
     mobileProfilePosRef.current = mobileProfilePos;
   }, [mobileProfilePos]);
 
+  function restoreLaunchSnapshots() {
+    if (desktopLaunchSnapshotRef.current) {
+      const snapshot = desktopLaunchSnapshotRef.current;
+      desktopSkillPositionsRef.current = snapshot.positions.map((position) => ({ ...position }));
+      desktopVelocitiesRef.current = snapshot.velocities.map((velocity) => ({ ...velocity }));
+      setSkillPositions(snapshot.positions.map((position) => ({ ...position })));
+    }
+
+    if (mobileLaunchSnapshotRef.current) {
+      const snapshot = mobileLaunchSnapshotRef.current;
+      mobileSkillPositionsRef.current = snapshot.positions.map((position) => ({ ...position }));
+      mobileVelocitiesRef.current = snapshot.velocities.map((velocity) => ({ ...velocity }));
+      setMobileSkillPositions(snapshot.positions.map((position) => ({ ...position })));
+    }
+
+    desktopLaunchSnapshotRef.current = null;
+    mobileLaunchSnapshotRef.current = null;
+  }
+
   useEffect(() => {
     function handleResize() {
       setViewport(getViewportConfig());
@@ -551,6 +585,7 @@ function App() {
       setCurrentView(getInitialView());
       setSelectedSkill(null);
       setIsPortfolioLaunching(false);
+      setSkillPullUntil(0);
     }
 
     window.addEventListener("resize", handleResize);
@@ -632,49 +667,72 @@ function App() {
       }
 
       const deltaSeconds = Math.min((timestamp - lastFrameRef.current) / 1000, 0.033);
-      const speedMultiplier =
-        currentView === "world" && boostedSkillMotionUntil > Date.now()
-          ? SKILL_SPEED_BOOST_MULTIPLIER
-          : 1;
+      const isPullingSkills = currentView === "world" && skillPullUntil > Date.now();
       lastFrameRef.current = timestamp;
 
       if (viewport.isMobile) {
-        const next = stepSkillSimulation({
-          positions: mobileSkillPositionsRef.current,
-          velocities: mobileVelocitiesRef.current,
-          size: mobileOrbit.skillSize,
-          bounds: {
-            width: mobileOrbit.width,
-            height: mobileOrbit.height,
-            topPadding: 52,
-          },
-          profilePos: mobileProfilePosRef.current,
-          profileSize: mobileOrbit.profileSize,
-          draggedIndex: draggingSkillIndex,
-          deltaSeconds: deltaSeconds * speedMultiplier,
-        });
+        if (isPullingSkills) {
+          const pulledPositions = pullSkillsTowardTarget({
+            positions: mobileSkillPositionsRef.current,
+            size: mobileOrbit.skillSize,
+            targetX: mobileProfilePosRef.current.x + mobileOrbit.profileSize / 2,
+            targetY: mobileProfilePosRef.current.y + mobileOrbit.profileSize / 2,
+            deltaSeconds,
+          });
 
-        mobileVelocitiesRef.current = next.velocities;
-        mobileSkillPositionsRef.current = next.positions;
-        setMobileSkillPositions(next.positions);
+          mobileSkillPositionsRef.current = pulledPositions;
+          setMobileSkillPositions(pulledPositions);
+        } else {
+          const next = stepSkillSimulation({
+            positions: mobileSkillPositionsRef.current,
+            velocities: mobileVelocitiesRef.current,
+            size: mobileOrbit.skillSize,
+            bounds: {
+              width: mobileOrbit.width,
+              height: mobileOrbit.height,
+              topPadding: 52,
+            },
+            profilePos: mobileProfilePosRef.current,
+            profileSize: mobileOrbit.profileSize,
+            draggedIndex: draggingSkillIndex,
+            deltaSeconds,
+          });
+
+          mobileVelocitiesRef.current = next.velocities;
+          mobileSkillPositionsRef.current = next.positions;
+          setMobileSkillPositions(next.positions);
+        }
       } else {
-        const next = stepSkillSimulation({
-          positions: desktopSkillPositionsRef.current,
-          velocities: desktopVelocitiesRef.current,
-          size: viewport.skillSize,
-          bounds: {
-            width: viewport.width,
-            height: viewport.height,
-          },
-          profilePos: profilePosRef.current,
-          profileSize: viewport.profileSize,
-          draggedIndex: draggingSkillIndex,
-          deltaSeconds: deltaSeconds * speedMultiplier,
-        });
+        if (isPullingSkills) {
+          const pulledPositions = pullSkillsTowardTarget({
+            positions: desktopSkillPositionsRef.current,
+            size: viewport.skillSize,
+            targetX: profilePosRef.current.x + viewport.profileSize / 2,
+            targetY: profilePosRef.current.y + viewport.profileSize / 2,
+            deltaSeconds,
+          });
 
-        desktopVelocitiesRef.current = next.velocities;
-        desktopSkillPositionsRef.current = next.positions;
-        setSkillPositions(next.positions);
+          desktopSkillPositionsRef.current = pulledPositions;
+          setSkillPositions(pulledPositions);
+        } else {
+          const next = stepSkillSimulation({
+            positions: desktopSkillPositionsRef.current,
+            velocities: desktopVelocitiesRef.current,
+            size: viewport.skillSize,
+            bounds: {
+              width: viewport.width,
+              height: viewport.height,
+            },
+            profilePos: profilePosRef.current,
+            profileSize: viewport.profileSize,
+            draggedIndex: draggingSkillIndex,
+            deltaSeconds,
+          });
+
+          desktopVelocitiesRef.current = next.velocities;
+          desktopSkillPositionsRef.current = next.positions;
+          setSkillPositions(next.positions);
+        }
       }
 
       animationFrameRef.current = window.requestAnimationFrame(animate);
@@ -702,7 +760,7 @@ function App() {
     mobileOrbit.skillSize,
     mobileOrbit.profileSize,
     draggingSkillIndex,
-    boostedSkillMotionUntil,
+    skillPullUntil,
   ]);
 
   useEffect(() => {
@@ -719,6 +777,7 @@ function App() {
       if (portfolioLaunchTimerRef.current) {
         window.clearTimeout(portfolioLaunchTimerRef.current);
       }
+      restoreLaunchSnapshots();
     };
   }, []);
 
@@ -726,6 +785,7 @@ function App() {
     if (portfolioLaunchTimerRef.current && view !== "portfolio") {
       window.clearTimeout(portfolioLaunchTimerRef.current);
       portfolioLaunchTimerRef.current = null;
+      restoreLaunchSnapshots();
     }
 
     if (view === "home") {
@@ -733,6 +793,7 @@ function App() {
       setCurrentView("home");
       setSelectedSkill(null);
       setIsPortfolioLaunching(false);
+      setSkillPullUntil(0);
       return;
     }
 
@@ -848,9 +909,19 @@ function App() {
 
     setSelectedSkill(null);
     setIsPortfolioLaunching(true);
-    setBoostedSkillMotionUntil(Date.now() + SKILL_SPEED_BOOST_DURATION_MS);
+    setSkillPullUntil(Date.now() + SKILL_PULL_DURATION_MS);
+    desktopLaunchSnapshotRef.current = {
+      positions: desktopSkillPositionsRef.current.map((position) => ({ ...position })),
+      velocities: desktopVelocitiesRef.current.map((velocity) => ({ ...velocity })),
+    };
+    mobileLaunchSnapshotRef.current = {
+      positions: mobileSkillPositionsRef.current.map((position) => ({ ...position })),
+      velocities: mobileVelocitiesRef.current.map((velocity) => ({ ...velocity })),
+    };
     portfolioLaunchTimerRef.current = window.setTimeout(() => {
       portfolioLaunchTimerRef.current = null;
+      restoreLaunchSnapshots();
+      setSkillPullUntil(0);
       navigateTo("portfolio");
     }, PORTFOLIO_OPEN_DELAY_MS);
   }
@@ -917,11 +988,7 @@ function App() {
                       onClick={() => handleSkillClick(skill, index)}
                       style={{
                         transform: `translate3d(${mobileSkillPositions[index].x}px, ${mobileSkillPositions[index].y}px, 0)`,
-                        animationDuration: `${
-                          boostedSkillMotionUntil > Date.now()
-                            ? Math.max(Number(skillStyles[index].duration) * 0.55, 0.45).toFixed(2)
-                            : skillStyles[index].duration
-                        }s`,
+                        animationDuration: `${skillStyles[index].duration}s`,
                         animationDelay: `${skillStyles[index].delay}s`,
                       }}
                     />
@@ -979,11 +1046,7 @@ function App() {
                     onClick={() => handleSkillClick(skill, index)}
                     style={{
                       transform: `translate3d(${skillPositions[index].x}px, ${skillPositions[index].y}px, 0)`,
-                      animationDuration: `${
-                        boostedSkillMotionUntil > Date.now()
-                          ? Math.max(Number(skillStyles[index].duration) * 0.55, 0.45).toFixed(2)
-                          : skillStyles[index].duration
-                      }s`,
+                      animationDuration: `${skillStyles[index].duration}s`,
                       animationDelay: `${skillStyles[index].delay}s`,
                     }}
                   />
